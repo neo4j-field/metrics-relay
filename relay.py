@@ -5,18 +5,23 @@
                           -- Michael Scott
 """
 import asyncio
+from asyncio import Queue, StreamReader, StreamWriter
+
 import logging
 from time import time, gmtime
-from typing import Coroutine, Generator, NewType, Tuple, Union
+from typing import (
+    Any, Callable, Coroutine, Generator, List, NewType, Tuple, Type, Union
+)
 
 # Metric values are either integer or float (for now).
-Number = NewType('Number', Union[int, float])
+Number = Union[int, float]
+Metric = Tuple[str, Number, Number]
 
 # Track connections: need a start point for measuring counter-based time series.
 CONNECTIONS = {}
 
 # Special garbage value so we don't have to wrangle None's
-BAD_DATA = ("", -1, -1)
+BAD_DATA: Metric = ("", -1, -1)
 
 
 def safe_convert(s: str) -> Number:
@@ -33,7 +38,7 @@ def safe_convert(s: str) -> Number:
         return float(s)
 
 
-def parse(data: bytes) -> Generator[Tuple[str, Number, Number], None, None]:
+def parse(data: bytes) -> Generator[Metric, None, None]:
     """
     Take a given series of bytes and turn into a series of Metrics.
     """
@@ -52,7 +57,7 @@ def parse(data: bytes) -> Generator[Tuple[str, Number, Number], None, None]:
         yield BAD_DATA
 
 
-async def convert_task(q_in: asyncio.Queue, q_out: asyncio.Queue):
+async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
     """
     Take raw inbound data and parse into metrics, outputting to q_out.
     """
@@ -67,20 +72,20 @@ async def convert_task(q_in: asyncio.Queue, q_out: asyncio.Queue):
         q_in.task_done()
 
 
-async def publish_task(q: asyncio.Queue):
+async def publish_task(q: Queue[Metric]) -> None:
     """
     Take metrics and send them...somewhere!
     """
-    batch = []
+    batch: List[Any] = []
 
     # TODO: this is the pluggable part. Parameterize.
-    async def publish():
+    async def publish() -> None:
         """Take our batch and ship it."""
         logging.info(f"flushing {len(batch):,} events")
         await asyncio.sleep(0.3)
         batch.clear()
 
-    async def consume():
+    async def consume() -> None:
         """Pull a work item off the queue and batch it."""
         event = await q.get()
         logging.info(f"appending {event}")
@@ -99,12 +104,13 @@ async def publish_task(q: asyncio.Queue):
             logging.warning(f"unhandled publishing exception: {e}")
 
 
-def create_consumer(q: asyncio.Queue) -> Coroutine:
+def create_consumer(q: Queue[bytes]) \
+        -> Callable[[StreamReader, StreamWriter], Coroutine[Any, Any, None]]:
     """
     Capture a given asyncio Queue instance and return a new coroutine that
     consumes from said queue.
     """
-    async def consumer(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def consumer(reader: StreamReader, writer: StreamWriter) -> None:
         """
         Primary connection handler.
         """
@@ -127,13 +133,13 @@ def create_consumer(q: asyncio.Queue) -> Coroutine:
     return consumer
 
 
-async def main(host: str = "127.0.0.1", port: int = 2003):
+async def main(host: str = "127.0.0.1", port: int = 2003) -> None:
     """
     Make rocket go now.
     """
     # Two buckets:
-    convert_q = asyncio.Queue()
-    publish_q = asyncio.Queue()
+    convert_q: Queue[bytes] = Queue()
+    publish_q: Queue[Metric] = Queue()
 
     # The plumbing.
     consumer = create_consumer(convert_q)
