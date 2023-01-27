@@ -65,14 +65,15 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         data = await q_in.get()
         for metric in parse(data):
             if metric is not BAD_DATA:
-                logging.info(f"adding metric {metric}")
+                logging.debug(f"adding metric {metric}")
                 await q_out.put(metric)
             else:
                 logging.warning("conversion error")
         q_in.task_done()
 
 
-async def publish_task(q: Queue[Metric]) -> None:
+async def publish_task(q: Queue[Metric], flush_interval: int = 100,
+                       flush_timeout: float = 15.0) -> None:
     """
     Take metrics and send them...somewhere!
     """
@@ -82,20 +83,18 @@ async def publish_task(q: Queue[Metric]) -> None:
     async def publish() -> None:
         """Take our batch and ship it."""
         logging.info(f"flushing {len(batch):,} events")
-        await asyncio.sleep(0.3)
         batch.clear()
 
     async def consume() -> None:
         """Pull a work item off the queue and batch it."""
         event = await q.get()
-        logging.info(f"appending {event}")
         batch.append(event)
         q.task_done()
 
     while True:
         try:
-            await asyncio.wait_for(consume(), timeout=15.0)
-            if len(batch) >= 33:
+            await asyncio.wait_for(consume(), timeout=flush_timeout)
+            if len(batch) >= flush_interval:
                 await publish()
         except asyncio.TimeoutError:
             if batch:
