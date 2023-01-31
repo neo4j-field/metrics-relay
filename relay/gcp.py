@@ -112,8 +112,6 @@ async def create_metric_descriptor(name: str,
 
     if metric_kind == MetricKind.COUNTER:
         desc.metric_kind = MetricDescriptor.MetricKind.CUMULATIVE
-    elif metric_kind == MetricKind.DELTA:
-        desc.metric_kind = MetricDescriptor.MetricKind.DELTA
     elif metric_kind == MetricKind.GAUGE:
         desc.metric_kind = MetricDescriptor.MetricKind.GAUGE
     else:
@@ -125,10 +123,6 @@ async def create_metric_descriptor(name: str,
         desc.value_type = MetricDescriptor.ValueType.INT64
     elif value_type == MetricType.FLOAT:
         desc.value_type = MetricDescriptor.ValueType.DOUBLE
-    elif value_type == MetricType.DISTRIBUTION:
-        desc.value_type = MetricDescriptor.ValueType.DISTRIBUTION
-    elif value_type == MetricType.STRING:
-        desc.value_type = MetricDescriptor.ValueType.STRING
     else:
         desc.value_type = MetricDescriptor.ValueType.VALUE_TYPE_UNSPECIFIED
 

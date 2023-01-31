@@ -35,9 +35,7 @@ class Metric(NamedTuple):
     seen: Number
 
     def guessMetricKind(self) -> gcp.MetricKind:
-        if self.key.endswith("_rate"):
-            return gcp.MetricKind.DELTA
-        elif self.key.endswith("count"):
+        if self.key.endswith("count"):
             return gcp.MetricKind.COUNTER
         else:
             return gcp.MetricKind.GAUGE
