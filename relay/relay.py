@@ -106,9 +106,13 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         data = await q_in.get()
         for metric in parse(data):
             # filter out bad data and database-specific metrics (for now)
-            if metric is not _BAD_DATA and not metric.key.startswith("database"):
-                logging.debug(f"adding metric {metric}")
-                await q_out.put(metric)
+            if metric is not _BAD_DATA:
+                if not metric.key.startswith("database"):
+                    logging.debug(f"adding metric {metric}")
+                    await q_out.put(metric)
+                else:
+                    # ignore for now
+                    continue
             else:
                 logging.warning("conversion error")
         q_in.task_done()
