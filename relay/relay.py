@@ -118,6 +118,7 @@ async def shipit(metric: Metric) -> None:
         # never seen this combo before!
         METRICS[metric.label] = { metric.key: metric.seen }
         label = gcp.MetricLabel("neo4j_label")
+        logging.info(f"new metric seen: {metric.key}::{metric.label}")
         await gcp.create_metric_descriptor(metric.key, metric.guessMetricKind(),
                                            metric.guessValueType(),
                                            labels=[label])
