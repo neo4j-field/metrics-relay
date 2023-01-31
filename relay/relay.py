@@ -105,7 +105,13 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         for metric in parse(data):
             # filter out bad data and database-specific metrics (for now)
             if metric is not _BAD_DATA:
-                if not metric.key.startswith("database"):
+                if metric.key.startswith("database"):
+                    # skip for now
+                    pass
+                elif metric.guessMetricKind() == gcp.MetricKind.COUNTER:
+                    # skip for now...needs a "start" time
+                    pass
+                else:
                     logging.debug(f"adding metric {metric}")
                     await q_out.put(metric)
                 else:
