@@ -1,13 +1,13 @@
 from enum import Enum
+from time import time
 import logging
-
 import requests
 
 from google.api.label_pb2 import LabelDescriptor
 from google.api.metric_pb2 import Metric, MetricDescriptor
 from google.cloud import monitoring_v3
 
-from typing import cast, Any, Awaitable, List, NamedTuple
+from typing import cast, Any, Awaitable, Dict, List, NamedTuple
 
 
 _METAROOT = "http://metadata.google.internal/computeMetadata/v1"
@@ -79,10 +79,12 @@ def getZoneId() -> str:
     global _ZONE_ID
     if _ZONE_ID is None:
         try:
-            _ZONE_ID = requests.get(
-                f"{_METAROOT}/instance/zone",
-                headers={"Metadata-Flavor": "Google"}
-            ).text
+            _ZONE_ID = (
+                requests.get(f"{_METAROOT}/instance/zone",
+                             headers={"Metadata-Flavor": "Google"})
+                .text
+                .split("/")[-1]
+            )
         except Exception as e:
             logging.warning(f"failed to fetch zone id: {e}")
     return cast(str, _ZONE_ID)
@@ -98,8 +100,11 @@ def getClient() -> monitoring_v3.MetricServiceAsyncClient:
     return cast(monitoring_v3.MetricServiceAsyncClient, _CLIENT)
 
 
-async def create_metric_descriptor(name: str, metric_kind: MetricKind, value_type: MetricType,
-                                   labels: List[MetricLabel] = []) -> Awaitable[Any]:
+async def create_metric_descriptor(name: str,
+                                   metric_kind: MetricKind,
+                                   value_type: MetricType,
+                                   labels: List[MetricLabel] = []) \
+                                   -> Awaitable[Any]:
     client = getClient()
     desc = MetricDescriptor()
     desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
@@ -140,3 +145,48 @@ async def create_metric_descriptor(name: str, metric_kind: MetricKind, value_typ
     return client.create_metric_descriptor(
         name=getProjectName(), metric_descriptor=desc
     )
+
+
+async def write_time_series(name: str, value: Any, value_type: MetricType,
+                            labels: Dict[str, str] = {}) -> Awaitable[Any]:
+    """
+    Crude first cut at writing a TimeSeries metric. Still needs work:
+      - handle multiple values at a time?
+      - deal with proper start time setting?
+    """
+    client = getClient()
+    now = time()
+    interval = monitoring_v3.TimeInterval({
+        "end_time": {
+            "seconds": int(now),
+            "nanos": (int((now - int(now)) * 10**9))
+        }
+    })
+
+    series = monitoring_v3.TimeSeries()
+    series.metric.type = f"{_METRIC_TYPE_ROOT}/{name}"
+    series.resource.type = "gce_instance"
+    series.resource.labels["instance_id"] = getInstanceId()
+    series.resource.labels["zone"] = getZoneId()
+
+    for key, value in labels.items():
+        series.metric.labels[key] = value
+
+    v: Dict[str, Any] = {}
+    if value_type == MetricType.INT:
+        v = {"int_value": int(value)}
+    elif value_type == MetricType.FLOAT:
+        v = {"double_value": float(value)}
+    elif value_type == MetricType.STRING:
+        v = {"string_value": str(value)}
+    elif value_type == MetricType.BOOL:
+        v = {"bool_value": bool(value)}
+    else:
+        # FALLBACK
+        v = {"string_value": str(value)}
+
+    point = monitoring_v3.Point({"interval": interval,
+                                 "value": v})
+    series.points = [point]
+    return client.create_time_series(name=getProjectName(),
+                                     time_series=[series])
