@@ -142,7 +142,7 @@ async def shipit(metrics: List[Metric]) -> None:
 
             # update our history
             old = METRICS.get(metric.label, {})
-            old[metric.label] = metric.seen
+            old[metric.key] = metric.seen
             METRICS[metric.label] = old
 
         # convert into a time series
