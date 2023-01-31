@@ -114,9 +114,6 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
                 else:
                     logging.debug(f"adding metric {metric}")
                     await q_out.put(metric)
-                else:
-                    # ignore for now
-                    continue
             else:
                 logging.warning("conversion error")
         q_in.task_done()
