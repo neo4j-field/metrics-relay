@@ -15,6 +15,7 @@ _CLIENT = None
 
 
 def getProjectId() -> str:
+    global _PROJECT_ID
     if _PROJECT_ID is None:
         try:
             _PROJECT_ID = requests.get(
@@ -27,6 +28,7 @@ def getProjectId() -> str:
 
 
 def getInstanceId() -> str:
+    global _INSTANCE_ID
     if _INSTANCE_ID is None:
         try:
             _INSTANCE_ID = requests.get(
@@ -39,6 +41,7 @@ def getInstanceId() -> str:
 
 
 def getZoneId() -> str:
+    global _ZONE_ID
     if _ZONE_ID is None:
         try:
             _ZONE_ID = requests.get(
