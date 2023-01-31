@@ -126,8 +126,6 @@ async def shipit(metrics: List[Metric]) -> None:
     series = []
 
     for metric in metrics:
-        series.append(time_series)
-
         if not metric.label in METRICS \
            or not metric.key in METRICS[metric.label]:
             # never seen this combo before!
@@ -140,13 +138,17 @@ async def shipit(metrics: List[Metric]) -> None:
             desc = await gcp.create_metric_descriptor(metric.key, kind,
                                                       value_type,
                                                       labels=[label])
-            logging.info(f"created new descriptor: {desc}")
-            time_series = gcp.create_time_series(
-                metric.key, metric.value, metric.seen, metric.guessValueType(),
-                labels={"neo4j_label": metric.label}
-            )
+            logging.info(f"created descriptor: {desc}")
+            logging.info(f"METRICS now {METRICS}")
 
-    logging.info(f"writing time series ({len(series)} points)")
+        # convert into a time series
+        time_series = gcp.create_time_series(
+            metric.key, metric.value, metric.seen, metric.guessValueType(),
+            labels={"neo4j_label": metric.label}
+        )
+        series.append(time_series)
+
+    logging.info(f"writing time series ({len(series)} data points)")
     await gcp.write_time_series(series)
 
 
