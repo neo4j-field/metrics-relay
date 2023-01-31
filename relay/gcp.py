@@ -59,10 +59,6 @@ def getProjectId() -> str:
     return cast(str, _PROJECT_ID)
 
 
-def getProjectName() -> str:
-    return f"projects/${getProjectId()}"
-
-
 def getInstanceId() -> str:
     global _INSTANCE_ID
     if _INSTANCE_ID is None:
@@ -108,8 +104,12 @@ async def create_metric_descriptor(name: str,
                                    -> Any:
     client = getClient()
     desc = MetricDescriptor()
+
+    project_name = f"projects/{getProjectId()}"
     name = name.replace(".", "/")
     desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
+
+    desc.montiored_resource_types = ["gce_instance"]
 
     if metric_kind == MetricKind.COUNTER:
         desc.metric_kind = MetricDescriptor.MetricKind.CUMULATIVE
@@ -145,7 +145,7 @@ async def create_metric_descriptor(name: str,
         desc.labels.append(l)
 
     result = await client.create_metric_descriptor(
-        name=getProjectName(), metric_descriptor=desc
+        name=project_name, metric_descriptor=desc
     )
     return result
 
@@ -199,5 +199,7 @@ async def write_time_series(series: List[monitoring_v3.TimeSeries]) -> None:
       - deal with proper start time setting?
     """
     client = getClient()
-    await client.create_time_series(name=getProjectName(),
+    project_name = f"projects/{getProjectId()}"
+
+    await client.create_time_series(name=project_name,
                                     time_series=series)
