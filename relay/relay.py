@@ -25,7 +25,7 @@ CONNECTIONS: Dict[str, Number] = {}
 METRICS: Dict[str, Dict[str, Number]] = {}
 
 # Background tasks. Prevent garbage collection.
-TASKS: Set[Coroutine[Any, Any, None]] = set()
+TASKS: Set[asyncio.Task[None]] = set()
 
 
 class Metric(NamedTuple):
@@ -67,7 +67,7 @@ def safe_convert(s: str) -> Number:
         return float(s)
 
 
-def background(coroutine: Coroutine[Any, Any, None], name: str):
+def background(coroutine: Coroutine[Any, Any, None], name: str) -> None:
     """
     Schedule a coroutine to run in the background.
     """
@@ -118,19 +118,20 @@ async def shipit(metric: Metric) -> None:
         # never seen this combo before!
         METRICS[metric.label] = { metric.key: metric.seen }
         label = gcp.MetricLabel("neo4j_label")
-        logging.info(f"new metric seen: {metric.key}::{metric.label}")
+        logging.info(f"new metric seen: {metric.key} @ {metric.label}")
         await gcp.create_metric_descriptor(metric.key, metric.guessMetricKind(),
                                            metric.guessValueType(),
                                            labels=[label])
 
-    result = await gcp.create_time_series(
+    result = await gcp.write_time_series(
         metric.key, metric.value, metric.guessValueType(),
-        labels=[{"neo4j_label": metric.label}]
+        labels={"neo4j_label": metric.label}
     )
     logging.info(f"shipit result: {result}")
 
 
-async def publish_task(q: Queue[Metric], shipper: Coroutine[Any, Any, None],
+async def publish_task(q: Queue[Metric],
+                       shipper: Callable[[Metric], Coroutine[Any, Any, None]],
                        flush_interval: int = 100,
                        flush_timeout: float = 15.0) -> None:
     """
