@@ -106,7 +106,7 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         data = await q_in.get()
         for metric in parse(data):
             # filter out bad data and database-specific metrics (for now)
-            if metric is not _BAD_DATA and not metric.key.contains(".database."):
+            if metric is not _BAD_DATA and not ".database." in metric.key:
                 logging.debug(f"adding metric {metric}")
                 await q_out.put(metric)
             else:
@@ -114,7 +114,7 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         q_in.task_done()
 
 
-async def shipit(metrics: Metric) -> None:
+async def shipit(metrics: List[Metric]) -> None:
     series = []
     for metric in metrics:
         if not metric.label in METRICS \
@@ -131,7 +131,7 @@ async def shipit(metrics: Metric) -> None:
             logging.info(f"created new descriptor: {desc}")
 
         time_series = gcp.create_time_series(
-            metric.key, metric.value, metric.guessValueType(),
+            metric.key, metric.value, metric.seen, metric.guessValueType(),
             labels={"neo4j_label": metric.label}
         )
         series.append(time_series)
@@ -141,7 +141,7 @@ async def shipit(metrics: Metric) -> None:
 
 
 async def publish_task(q: Queue[Metric],
-                       shipper: Callable[[Metric], Coroutine[Any, Any, None]],
+                       shipper: Callable[[List[Metric]], Coroutine[Any, Any, None]],
                        flush_interval: int = 100,
                        flush_timeout: float = 15.0) -> None:
     """

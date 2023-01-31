@@ -7,7 +7,7 @@ from google.api.label_pb2 import LabelDescriptor
 from google.api.metric_pb2 import Metric, MetricDescriptor
 from google.cloud import monitoring_v3
 
-from typing import cast, Any, Awaitable, Dict, List, NamedTuple
+from typing import cast, Any, Awaitable, Dict, List, NamedTuple, Union
 
 
 _METAROOT = "http://metadata.google.internal/computeMetadata/v1"
@@ -104,7 +104,7 @@ async def create_metric_descriptor(name: str,
                                    metric_kind: MetricKind,
                                    value_type: MetricType,
                                    labels: List[MetricLabel] = []) \
-                                   -> Awaitable[Any]:
+                                   -> Any:
     client = getClient()
     desc = MetricDescriptor()
     name = name.replace(".", "/")
@@ -149,8 +149,9 @@ async def create_metric_descriptor(name: str,
     return result
 
 
-def create_time_series(name: str, value: Any, ts: Any, value_type: MetricType,
-                       labels: Dict[str, str] = {}) -> monitoring_v3.TimeSeries:
+def create_time_series(name: str, value: Union[int, float], ts: Union[int, float],
+                       value_type: MetricType, labels: Dict[str, str] = {}) \
+                       -> monitoring_v3.TimeSeries:
     """
     Create a single GCP Time Series object.
     """
@@ -190,7 +191,7 @@ def create_time_series(name: str, value: Any, ts: Any, value_type: MetricType,
     return series
 
 
-async def write_time_series(series: List[series]) -> None:
+async def write_time_series(series: List[monitoring_v3.TimeSeries]) -> None:
     """
     Crude first cut at writing a TimeSeries metric. Still needs work:
       - handle multiple values at a time?
@@ -198,4 +199,4 @@ async def write_time_series(series: List[series]) -> None:
     """
     client = getClient()
     await client.create_time_series(name=getProjectName(),
-                                    time_series=[series])
+                                    time_series=series)
