@@ -53,6 +53,7 @@ def getProjectId() -> str:
                 f"{_METAROOT}/project/project-id",
                 headers={"Metadata-Flavor": "Google"}
             ).text
+            logging.info(f"using PROJECT_ID=${_PROJECT_ID}")
         except Exception as e:
             logging.warning(f"failed to fetch project id: {e}")
     return cast(str, _PROJECT_ID)
