@@ -129,17 +129,21 @@ async def shipit(metrics: List[Metric]) -> None:
         if not metric.label in METRICS \
            or not metric.key in METRICS[metric.label]:
             # never seen this combo before!
-            METRICS[metric.label] = { metric.key: metric.seen }
             label = gcp.MetricLabel("neo4j_label",
                                     description="Data from a Neo4j instance.")
             kind = metric.guessMetricKind()
             value_type = metric.guessValueType()
+
             logging.info(f"creating new metric: {metric})")
             desc = await gcp.create_metric_descriptor(metric.key, kind,
                                                       value_type,
                                                       labels=[label])
             logging.info(f"created descriptor: {desc}")
-            logging.info(f"METRICS now {METRICS}")
+
+            # update our history
+            old = METRICS.get(metric.label, {})
+            old[metric.label] = metric.seen
+            METRICS[metric.label] = old
 
         # convert into a time series
         time_series = gcp.create_time_series(
