@@ -2,6 +2,7 @@ from enum import Enum
 from time import time
 import logging
 import requests
+import traceback
 
 from google.api.label_pb2 import LabelDescriptor
 from google.api.metric_pb2 import Metric, MetricDescriptor
@@ -109,8 +110,6 @@ async def create_metric_descriptor(name: str,
     name = name.replace(".", "/")
     desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
 
-    desc.montiored_resource_types = ["gce_instance"]
-
     if metric_kind == MetricKind.COUNTER:
         desc.metric_kind = MetricDescriptor.MetricKind.CUMULATIVE
     elif metric_kind == MetricKind.DELTA:
@@ -144,10 +143,14 @@ async def create_metric_descriptor(name: str,
             l.value_type = LabelDescriptor.ValueType.STRING
         desc.labels.append(l)
 
-    result = await client.create_metric_descriptor(
-        name=project_name, metric_descriptor=desc
-    )
-    return result
+    try:
+        return await client.create_metric_descriptor(
+            name=project_name, metric_descriptor=desc
+        )
+    except Exception as e:
+        logging.error(f"failed to create metric descriptor: {e}")
+        traceback.print_exc()
+    return None
 
 
 def create_time_series(name: str, value: Union[int, float], ts: Union[int, float],
@@ -201,5 +204,9 @@ async def write_time_series(series: List[monitoring_v3.TimeSeries]) -> None:
     client = getClient()
     project_name = f"projects/{getProjectId()}"
 
-    await client.create_time_series(name=project_name,
-                                    time_series=series)
+    try:
+        await client.create_time_series(name=project_name,
+                                        time_series=series)
+    except Exception as e:
+        logging.error(f"failed to create time series: {e}")
+        traceback.print_exc()
