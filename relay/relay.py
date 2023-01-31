@@ -123,8 +123,9 @@ async def shipit(metric: Metric) -> None:
         logging.info(
             f"new metric: {metric.key} @ {metric.label} ({kind}:{value_type})"
         )
-        await gcp.create_metric_descriptor(metric.key, kind, value_type,
-                                           labels=[label])
+        desc = await gcp.create_metric_descriptor(metric.key, kind, value_type,
+                                                  labels=[label])
+        logging.info(f"created new descriptor: {desc}")
 
     logging.info(f"writing time series for: {metric}")
     result = await gcp.write_time_series(
