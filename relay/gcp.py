@@ -31,7 +31,7 @@ class MetricType(Enum):
     DISTRIBUTION = "DISTRIBUTION"
     INT = "INT"
     FLOAT = "FLOAT"
-    STRING = "STRING"
+    STRING = "STRING" # XXX UNSUPPORTED?
     UNDEFINED = "UNDEFINED"
 
 class LabelValueType(Enum):

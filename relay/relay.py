@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
     ``You miss 100% of the shots you don't take.''
                        -- Wayne Gretzky
@@ -7,21 +6,51 @@
 import asyncio
 from asyncio import Queue, StreamReader, StreamWriter
 
+from . import gcp
+
 import logging
-from time import time, gmtime
+from time import time
 from typing import (
-    Any, Callable, Coroutine, Generator, List, NewType, Tuple, Type, Union
+    Any, Callable, Coroutine, Dict, Generator, List, NamedTuple, NewType, Set,
+    Tuple, Type, Union
 )
 
 # Metric values are either integer or float (for now).
 Number = Union[int, float]
-Metric = Tuple[str, Number, Number]
 
 # Track connections: need a start point for measuring counter-based time series.
-CONNECTIONS = {}
+CONNECTIONS: Dict[str, Number] = {}
 
-# Special garbage value so we don't have to wrangle None's
-BAD_DATA: Metric = ("", -1, -1)
+# History of observed metrics and when first seen. { label: { key, time} }
+METRICS: Dict[str, Dict[str, Number]] = {}
+
+# Background tasks. Prevent garbage collection.
+TASKS: Set[Coroutine[Any, Any, None]] = set()
+
+
+class Metric(NamedTuple):
+    label: str
+    key: str
+    value: Number
+    seen: Number
+
+    def guessMetricKind(self) -> gcp.MetricKind:
+        if self.key.endswith("_rate"):
+            return gcp.MetricKind.DELTA
+        elif self.key.endswith("count"):
+            return gcp.MetricKind.COUNTER
+        else:
+            return gcp.MetricKind.GAUGE
+
+    def guessValueType(self) -> gcp.MetricType:
+        if type(self.value) is int:
+            return gcp.MetricType.INT
+        elif type(self.value) is float:
+            return gcp.MetricType.FLOAT
+        else:
+            return gcp.MetricType.UNDEFINED
+
+_BAD_DATA = Metric("", "", -1, -1)
 
 
 def safe_convert(s: str) -> Number:
@@ -38,6 +67,15 @@ def safe_convert(s: str) -> Number:
         return float(s)
 
 
+def background(coroutine: Coroutine[Any, Any, None], name: str):
+    """
+    Schedule a coroutine to run in the background.
+    """
+    task = asyncio.create_task(coroutine, name=name)
+    TASKS.add(task)
+    task.add_done_callback(TASKS.discard)
+
+
 def parse(data: bytes) -> Generator[Metric, None, None]:
     """
     Take a given series of bytes and turn into a series of Metrics.
@@ -45,16 +83,19 @@ def parse(data: bytes) -> Generator[Metric, None, None]:
     try:
         for line in data.decode("utf8").splitlines():
             try:
-                (metric, val_raw, ts_raw) = line.strip().split(" ")
-                val = safe_convert(val_raw)
-                ts = safe_convert(ts_raw)
-                yield (metric, val, ts)
+                (raw, val_raw, ts_raw) = line.strip().split(" ")
+                pos = raw.find(".")
+                label = raw[:pos]
+                key = raw[pos+1:]
+                value = safe_convert(val_raw)
+                seen = safe_convert(ts_raw)
+                yield Metric(label, key, value, seen)
             except Exception as e:
                 # XXX drop garbage lines for now
                 logging.warning(f"dropping line: {e}")
     except Exception as e:
         logging.warning(f"unhandled parser error: {e}")
-        yield BAD_DATA
+        yield _BAD_DATA
 
 
 async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
@@ -64,7 +105,7 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
     while True:
         data = await q_in.get()
         for metric in parse(data):
-            if metric is not BAD_DATA:
+            if metric is not _BAD_DATA:
                 logging.debug(f"adding metric {metric}")
                 await q_out.put(metric)
             else:
@@ -72,7 +113,24 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         q_in.task_done()
 
 
-async def publish_task(q: Queue[Metric], flush_interval: int = 100,
+async def shipit(metric: Metric) -> None:
+    if not metric.label in METRICS or not metric.key in METRICS[metric.label]:
+        # never seen this combo before!
+        METRICS[metric.label] = { metric.key: metric.seen }
+        label = gcp.MetricLabel("neo4j_label")
+        await gcp.create_metric_descriptor(metric.key, metric.guessMetricKind(),
+                                           metric.guessValueType(),
+                                           labels=[label])
+
+    result = await gcp.create_time_series(
+        metric.key, metric.value, metric.guessValueType(),
+        labels=[{"neo4j_label": metric.label}]
+    )
+    logging.info(f"shipit result: {result}")
+
+
+async def publish_task(q: Queue[Metric], shipper: Coroutine[Any, Any, None],
+                       flush_interval: int = 100,
                        flush_timeout: float = 15.0) -> None:
     """
     Take metrics and send them...somewhere!
@@ -83,6 +141,8 @@ async def publish_task(q: Queue[Metric], flush_interval: int = 100,
     async def publish() -> None:
         """Take our batch and ship it."""
         logging.info(f"flushing {len(batch):,} events")
+        for item in batch:
+            background(shipper(item), "flush")
         batch.clear()
 
     async def consume() -> None:
@@ -144,7 +204,7 @@ async def main(host: str = "127.0.0.1", port: int = 2003) -> None:
     consumer = create_consumer(convert_q)
     converter = asyncio.create_task(convert_task(convert_q, publish_q),
                                     name="converter")
-    publisher = asyncio.create_task(publish_task(publish_q),
+    publisher = asyncio.create_task(publish_task(publish_q, shipit),
                                     name="publisher")
 
     # Fire up the server. Let it flow.
@@ -157,42 +217,3 @@ async def main(host: str = "127.0.0.1", port: int = 2003) -> None:
     # Drain any remaining work items.
     # XXX this isn't reached...need to hook into signal handler
     await asyncio.wait((convert_q.join(), publish_q.join()), timeout=30.0)
-
-
-#############################################################################
-
-class UTCFormatter(logging.Formatter):
-    """
-    https://docs.python.org/3/howto/logging-cookbook.html#formatting-times-using-utc-gmt-via-configuration
-    """
-    converter = gmtime
-
-# Mimic Neo4j logging style as best as possible
-LOGGING_CONFIG = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "utc": {
-            "()": UTCFormatter,
-            "format": "%(asctime)s %(levelname)-8s [%(name)-12s] %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S%z",
-        },
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "utc",
-        },
-    },
-    "root": { "handlers": [ "console" ], "level": "DEBUG" },
-}
-
-
-if __name__ == "__main__":
-    import logging.config
-    try:
-        logging.config.dictConfig(LOGGING_CONFIG)
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        # XXX ctrl-c caught...we should flush
-        pass
