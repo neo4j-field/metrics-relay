@@ -107,6 +107,7 @@ async def create_metric_descriptor(name: str,
                                    -> Awaitable[Any]:
     client = getClient()
     desc = MetricDescriptor()
+    project_name = f"projects/{getProjectId()}"
     name = name.replace(".", "/")
     desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
 
@@ -144,7 +145,7 @@ async def create_metric_descriptor(name: str,
         desc.labels.append(l)
 
     return client.create_metric_descriptor(
-        name=getProjectName(), metric_descriptor=desc
+        name=project_name, metric_descriptor=desc
     )
 
 
@@ -156,6 +157,7 @@ async def write_time_series(name: str, value: Any, value_type: MetricType,
       - deal with proper start time setting?
     """
     client = getClient()
+    project_name = f"projects/{getProjectId()}"
     now = time()
     interval = monitoring_v3.TimeInterval({
         "end_time": {
@@ -174,21 +176,21 @@ async def write_time_series(name: str, value: Any, value_type: MetricType,
     for k, v in labels.items():
         series.metric.labels[k] = v
 
-    v: Dict[str, Any] = {}
+    point_value: Dict[str, Any] = {}
     if value_type == MetricType.INT:
-        v = {"int64_value": int(value)}
+        point_value = {"int64_value": int(value)}
     elif value_type == MetricType.FLOAT:
-        v = {"double_value": float(value)}
+        point_value = {"double_value": float(value)}
     elif value_type == MetricType.STRING:
-        v = {"string_value": str(value)}
+        point_value = {"string_value": str(value)}
     elif value_type == MetricType.BOOL:
-        v = {"bool_value": bool(value)}
+        point_value = {"bool_value": bool(value)}
     else:
-        # FALLBACK
-        v = {"string_value": str(value)}
+        # FALLBACK -- XXX this might not work with GCP custom metrics!
+        point_valuev = {"string_value": str(value)}
 
     point = monitoring_v3.Point({"interval": interval,
-                                 "value": v})
+                                 "value": point_value})
     series.points = [point]
-    return client.create_time_series(name=getProjectName(),
+    return client.create_time_series(name=project_name,
                                      time_series=[series])
