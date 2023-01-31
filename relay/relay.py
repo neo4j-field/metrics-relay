@@ -105,7 +105,8 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
     while True:
         data = await q_in.get()
         for metric in parse(data):
-            if metric is not _BAD_DATA:
+            # filter out bad data and database-specific metrics (for now)
+            if metric is not _BAD_DATA and not metric.key.contains(".database."):
                 logging.debug(f"adding metric {metric}")
                 await q_out.put(metric)
             else:
@@ -113,26 +114,30 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
         q_in.task_done()
 
 
-async def shipit(metric: Metric) -> None:
-    if not metric.label in METRICS or not metric.key in METRICS[metric.label]:
-        # never seen this combo before!
-        METRICS[metric.label] = { metric.key: metric.seen }
-        label = gcp.MetricLabel("neo4j_label")
-        kind = metric.guessMetricKind()
-        value_type = metric.guessValueType()
-        logging.info(
-            f"new metric: {metric.key} @ {metric.label} ({kind}:{value_type})"
-        )
-        desc = await gcp.create_metric_descriptor(metric.key, kind, value_type,
-                                                  labels=[label])
-        logging.info(f"created new descriptor: {desc}")
+async def shipit(metrics: Metric) -> None:
+    series = []
+    for metric in metrics:
+        if not metric.label in METRICS \
+           or not metric.key in METRICS[metric.label]:
+            # never seen this combo before!
+            METRICS[metric.label] = { metric.key: metric.seen }
+            label = gcp.MetricLabel("neo4j_label")
+            kind = metric.guessMetricKind()
+            value_type = metric.guessValueType()
+            logging.info(f"creating new metric: {metric})")
+            desc = await gcp.create_metric_descriptor(metric.key, kind,
+                                                      value_type,
+                                                      labels=[label])
+            logging.info(f"created new descriptor: {desc}")
 
-    logging.info(f"writing time series for: {metric}")
-    result = await gcp.write_time_series(
-        metric.key, metric.value, metric.guessValueType(),
-        labels={"neo4j_label": metric.label}
-    )
-    logging.info(f"shipit result: {result}")
+        time_series = gcp.create_time_series(
+            metric.key, metric.value, metric.guessValueType(),
+            labels={"neo4j_label": metric.label}
+        )
+        series.append(time_series)
+
+    logging.info(f"writing time series (sz={len(series)}")
+    await gcp.write_time_series(series)
 
 
 async def publish_task(q: Queue[Metric],
@@ -148,8 +153,7 @@ async def publish_task(q: Queue[Metric],
     async def publish() -> None:
         """Take our batch and ship it."""
         logging.info(f"flushing {len(batch):,} events")
-        for item in batch:
-            background(shipper(item), "flush")
+        background(shipper(batch.copy()), "publish-to-gcp")
         batch.clear()
 
     async def consume() -> None:

@@ -107,7 +107,6 @@ async def create_metric_descriptor(name: str,
                                    -> Awaitable[Any]:
     client = getClient()
     desc = MetricDescriptor()
-    project_name = f"projects/{getProjectId()}"
     name = name.replace(".", "/")
     desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
 
@@ -145,29 +144,24 @@ async def create_metric_descriptor(name: str,
         desc.labels.append(l)
 
     result = await client.create_metric_descriptor(
-        name=project_name, metric_descriptor=desc
+        name=getProjectName(), metric_descriptor=desc
     )
     return result
 
 
-async def write_time_series(name: str, value: Any, value_type: MetricType,
-                            labels: Dict[str, str] = {}) -> Awaitable[Any]:
+def create_time_series(name: str, value: Any, ts: Any, value_type: MetricType,
+                       labels: Dict[str, str] = {}) -> monitoring_v3.TimeSeries:
     """
-    Crude first cut at writing a TimeSeries metric. Still needs work:
-      - handle multiple values at a time?
-      - deal with proper start time setting?
+    Create a single GCP Time Series object.
     """
-    client = getClient()
-    project_name = f"projects/{getProjectId()}"
-    now = time()
+    series = monitoring_v3.TimeSeries()
     interval = monitoring_v3.TimeInterval({
         "end_time": {
-            "seconds": int(now),
-            "nanos": (int((now - int(now)) * 10**9))
+            "seconds": int(ts),
+            "nanos": (int((ts - int(ts)) * 10**9))
         }
     })
 
-    series = monitoring_v3.TimeSeries()
     name = name.replace(".", "/")
     series.metric.type = f"{_METRIC_TYPE_ROOT}/{name}"
     series.resource.type = "gce_instance"
@@ -187,12 +181,21 @@ async def write_time_series(name: str, value: Any, value_type: MetricType,
     elif value_type == MetricType.BOOL:
         point_value = {"bool_value": bool(value)}
     else:
-        # FALLBACK -- XXX this might not work with GCP custom metrics!
+        # FALLBACK -- XXX this might not work with GCP custom metrics!!!
         point_valuev = {"string_value": str(value)}
 
     point = monitoring_v3.Point({"interval": interval,
                                  "value": point_value})
     series.points = [point]
-    result = await client.create_time_series(name=project_name,
-                                             time_series=[series])
-    return result
+    return series
+
+
+async def write_time_series(series: List[series]) -> None:
+    """
+    Crude first cut at writing a TimeSeries metric. Still needs work:
+      - handle multiple values at a time?
+      - deal with proper start time setting?
+    """
+    client = getClient()
+    await client.create_time_series(name=getProjectName(),
+                                    time_series=[series])
