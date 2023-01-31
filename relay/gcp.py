@@ -144,9 +144,10 @@ async def create_metric_descriptor(name: str,
             l.value_type = LabelDescriptor.ValueType.STRING
         desc.labels.append(l)
 
-    return client.create_metric_descriptor(
+    result = await client.create_metric_descriptor(
         name=project_name, metric_descriptor=desc
     )
+    return result
 
 
 async def write_time_series(name: str, value: Any, value_type: MetricType,
@@ -192,5 +193,6 @@ async def write_time_series(name: str, value: Any, value_type: MetricType,
     point = monitoring_v3.Point({"interval": interval,
                                  "value": point_value})
     series.points = [point]
-    return client.create_time_series(name=project_name,
-                                     time_series=[series])
+    result = await client.create_time_series(name=project_name,
+                                             time_series=[series])
+    return result
