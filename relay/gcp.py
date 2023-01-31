@@ -122,7 +122,7 @@ async def create_metric_descriptor(name: str,
     if value_type == MetricType.BOOL:
         desc.value_type = MetricDescriptor.ValueType.BOOL
     elif value_type == MetricType.INT:
-        desc.value_type = MetricDescriptor.ValueType.INT
+        desc.value_type = MetricDescriptor.ValueType.INT64
     elif value_type == MetricType.FLOAT:
         desc.value_type = MetricDescriptor.ValueType.DOUBLE
     elif value_type == MetricType.DISTRIBUTION:
@@ -138,7 +138,7 @@ async def create_metric_descriptor(name: str,
         if label.value_type == LabelValueType.BOOL:
             l.value_type = LabelDescriptor.ValueType.BOOL
         elif label.value_type == LabelValueType.INT:
-            l.value_type = LabelDescriptor.ValueType.INT
+            l.value_type = LabelDescriptor.ValueType.INT64
         else:
             l.value_type = LabelDescriptor.ValueType.STRING
         desc.labels.append(l)
@@ -176,7 +176,7 @@ async def write_time_series(name: str, value: Any, value_type: MetricType,
 
     v: Dict[str, Any] = {}
     if value_type == MetricType.INT:
-        v = {"int_value": int(value)}
+        v = {"int64_value": int(value)}
     elif value_type == MetricType.FLOAT:
         v = {"double_value": float(value)}
     elif value_type == MetricType.STRING:
