@@ -107,6 +107,7 @@ async def create_metric_descriptor(name: str,
                                    -> Awaitable[Any]:
     client = getClient()
     desc = MetricDescriptor()
+    name = name.replace(".", "/")
     desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
 
     if metric_kind == MetricKind.COUNTER:
@@ -164,13 +165,14 @@ async def write_time_series(name: str, value: Any, value_type: MetricType,
     })
 
     series = monitoring_v3.TimeSeries()
+    name = name.replace(".", "/")
     series.metric.type = f"{_METRIC_TYPE_ROOT}/{name}"
     series.resource.type = "gce_instance"
     series.resource.labels["instance_id"] = getInstanceId()
     series.resource.labels["zone"] = getZoneId()
 
-    for key, value in labels.items():
-        series.metric.labels[key] = value
+    for k, v in labels.items():
+        series.metric.labels[k] = v
 
     v: Dict[str, Any] = {}
     if value_type == MetricType.INT:

@@ -118,11 +118,15 @@ async def shipit(metric: Metric) -> None:
         # never seen this combo before!
         METRICS[metric.label] = { metric.key: metric.seen }
         label = gcp.MetricLabel("neo4j_label")
-        logging.info(f"new metric seen: {metric.key} @ {metric.label}")
-        await gcp.create_metric_descriptor(metric.key, metric.guessMetricKind(),
-                                           metric.guessValueType(),
+        kind = metric.guessMetricKind()
+        value_type = metric.guessValueType()
+        logging.info(
+            f"new metric: {metric.key} @ {metric.label} ({kind}:{value_type})"
+        )
+        await gcp.create_metric_descriptor(metric.key, kind, value_type,
                                            labels=[label])
 
+    logging.info(f"writing time series for: {metric}")
     result = await gcp.write_time_series(
         metric.key, metric.value, metric.guessValueType(),
         labels={"neo4j_label": metric.label}
