@@ -120,13 +120,20 @@ async def convert_task(q_in: Queue[bytes], q_out: Queue[Metric]) -> None:
 
 
 async def shipit(metrics: List[Metric]) -> None:
+    """
+    Send the metrics to...GCP?
+    """
     series = []
+
     for metric in metrics:
+        series.append(time_series)
+
         if not metric.label in METRICS \
            or not metric.key in METRICS[metric.label]:
             # never seen this combo before!
             METRICS[metric.label] = { metric.key: metric.seen }
-            label = gcp.MetricLabel("neo4j_label")
+            label = gcp.MetricLabel("neo4j_label",
+                                    description="Data from a Neo4j instance.")
             kind = metric.guessMetricKind()
             value_type = metric.guessValueType()
             logging.info(f"creating new metric: {metric})")
@@ -134,14 +141,12 @@ async def shipit(metrics: List[Metric]) -> None:
                                                       value_type,
                                                       labels=[label])
             logging.info(f"created new descriptor: {desc}")
+            time_series = gcp.create_time_series(
+                metric.key, metric.value, metric.seen, metric.guessValueType(),
+                labels={"neo4j_label": metric.label}
+            )
 
-        time_series = gcp.create_time_series(
-            metric.key, metric.value, metric.seen, metric.guessValueType(),
-            labels={"neo4j_label": metric.label}
-        )
-        series.append(time_series)
-
-    logging.info(f"writing time series (sz={len(series)}")
+    logging.info(f"writing time series ({len(series)} points)")
     await gcp.write_time_series(series)
 
 
