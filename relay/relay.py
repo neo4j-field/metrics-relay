@@ -134,10 +134,7 @@ def create_consumer(q: Queue[WorkItem]) \
             line = await reader.readline()
             if line:
                 await q.put(WorkItem(buffer=line, client=client))
-
-        # Teardown and cleanup.
-        duration = time() - CONNECTIONS.pop(client)
-        logging.debug(f"goodbye {client} (duration: {round(duration, 2)}s)!")
+        logging.debug(f"goodbye {client:port}")
 
     return consumer
 
