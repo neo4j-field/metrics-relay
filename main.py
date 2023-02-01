@@ -53,8 +53,8 @@ if __name__ == "__main__":
 
         if args.debug:
             root = LOGGING_CONFIG["root"]
-            root.update({"level", "DEBUG"})
-            LOGGING_CONFIG.update(root)
+            root.update({"level": "DEBUG"})
+            LOGGING_CONFIG.update({"root": root})
         logging.config.dictConfig(LOGGING_CONFIG)
 
         asyncio.run(relay.main(args.host, args.port))
