@@ -103,6 +103,9 @@ class Label(NamedTuple):
 BAD_DATA = GraphiteMetric("", -1, -1)
 
 
+CLIENT_NAME_LABEL = LabelDescriptor(key="neo4j_instance_name",
+                                    value_type=LabelType.STRING,
+                                    description="Hostname of Neo4j system")
 DB_NAME_LABEL = LabelDescriptor(key="neo4j_db_name",
                                 value_type=LabelType.STRING,
                                 description="Name of the Neo4j database.")
@@ -189,6 +192,7 @@ class Neo4j5Metric:
                       first_seen: float = 0.0) -> "Neo4j5Metric":
         parts = raw.key.split(".")
         metric = Neo4j5Metric()
+        metric.labels = []
 
         # copy some simple values
         metric.value = raw.value
@@ -197,8 +201,11 @@ class Neo4j5Metric:
                                first_seen=first_seen)
         metric.seen_at = raw.seen_at
 
+        # identify the neo4j instance
+        metric.labels.append(Label(CLIENT_NAME_LABEL, metric.origin.host))
+        metric.labels.append(Label(HOST_LABEL, metric.origin.label))
+
         # identify the subsystem
-        metric.labels = []
         if parts[1] == "database":
             metric.system = MetricSystem.DATABASE
             metric.labels.append(Label(DB_NAME_LABEL, parts[2]))
