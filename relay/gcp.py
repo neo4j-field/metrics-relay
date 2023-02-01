@@ -148,10 +148,11 @@ def create_time_series(metric: Neo4j5Metric) -> monitoring_v3.TimeSeries:
     })
 
     # Describe the series metadata...
+    # XXX this needs re-work to not report the relayer
     series.metric.type = f"{_METRIC_TYPE_ROOT}/{metric.key}"
     series.resource.type = "gce_instance"
-    # series.resource.labels["instance_id"] = getInstanceId()
-    # series.resource.labels["zone"] = getZoneId()
+    series.resource.labels["instance_id"] = getInstanceId()
+    series.resource.labels["zone"] = getZoneId()
 
     for label in metric.labels:
         series.metric.labels[label.descriptor.key] = label.value
