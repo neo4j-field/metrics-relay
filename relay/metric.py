@@ -198,7 +198,7 @@ class Neo4j5Metric:
         metric.value = raw.value
         metric.origin = Origin(host=host,
                                label=parts[0], # it's our prefix
-                               first_seen=first_seen)
+                               first_seen=min(first_seen, raw.seen_at))
         metric.seen_at = raw.seen_at
 
         # identify the neo4j instance
