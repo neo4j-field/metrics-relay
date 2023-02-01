@@ -65,7 +65,7 @@ class MetricSystem(Enum):
     """
     DBMS = "DBMS"
     DATABASE = "DATABASE"
-
+    POOL = "POOL"
 
 
 class LabelType(Enum):

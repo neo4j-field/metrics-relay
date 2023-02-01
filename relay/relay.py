@@ -53,7 +53,12 @@ def parse(data: bytes, host: str,
             try:
                 raw = GraphiteMetric.parse(line)
                 if not raw == BAD_DATA:
-                    yield Neo4j5Metric.from_graphite(raw, host, first_seen)
+                    metric = Neo4j5Metric.from_graphite(raw, host, first_seen)
+                    # db pool metrics are broken in v5
+                    if metric.system == MetricSystem.DATABASE \
+                       and "pool" in metric.key:
+                        continue
+                    yield metric
             except Exception as e:
                 # XXX drop garbage lines for now
                 logging.warning(f"dropping line: {e}")
