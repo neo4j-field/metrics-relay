@@ -4,11 +4,13 @@ import logging
 import requests
 import traceback
 
-from google.api.label_pb2 import LabelDescriptor
-from google.api.metric_pb2 import Metric, MetricDescriptor
+from google.api import label_pb2
+from google.api import metric_pb2
 from google.cloud import monitoring_v3
 
-from typing import cast, Any, Awaitable, Dict, List, NamedTuple, Union
+from .metric import *
+
+from typing import cast, Any, Awaitable, Dict, List, NamedTuple, Set, Union
 
 
 _METAROOT = "http://metadata.google.internal/computeMetadata/v1"
@@ -18,32 +20,6 @@ _ZONE_ID = None
 _CLIENT = None
 
 _METRIC_TYPE_ROOT = "custom.googleapis.com/neo4j"
-
-
-## TODO: pull these out as a global abstraction
-class MetricKind(Enum):
-    COUNTER = "COUNTER"
-    DELTA = "DELTA"
-    GAUGE = "GAUGE"
-    UNDEFINED = "UNDEFINED"
-
-class MetricType(Enum):
-    BOOL = "BOOL"
-    DISTRIBUTION = "DISTRIBUTION"
-    INT = "INT"
-    FLOAT = "FLOAT"
-    STRING = "STRING" # XXX UNSUPPORTED?
-    UNDEFINED = "UNDEFINED"
-
-class LabelValueType(Enum):
-    BOOL = "BOOL"
-    INT = "INT"
-    STRING = "STRING"
-
-class MetricLabel(NamedTuple):
-    key: str
-    value_type: LabelValueType = LabelValueType.STRING
-    description: str = ""
 
 
 def getProjectId() -> str:
@@ -98,90 +74,94 @@ def getClient() -> monitoring_v3.MetricServiceAsyncClient:
     return cast(monitoring_v3.MetricServiceAsyncClient, _CLIENT)
 
 
-async def create_metric_descriptor(name: str,
-                                   metric_kind: MetricKind,
-                                   value_type: MetricType,
-                                   labels: List[MetricLabel] = []) \
-                                   -> Any:
+async def create_metric_descriptor(metric: Neo4j5Metric) -> bool:
+    """
+    Given a Neo4j5Metric, tell GCP some details on what it represents.
+
+    This is optional, but lets us define some metadata for labels.
+    """
     client = getClient()
-    desc = MetricDescriptor()
-
     project_name = f"projects/{getProjectId()}"
-    name = name.replace(".", "/")
-    desc.type = f"{_METRIC_TYPE_ROOT}/{name}"
 
-    if metric_kind == MetricKind.COUNTER:
-        desc.metric_kind = MetricDescriptor.MetricKind.CUMULATIVE
-    elif metric_kind == MetricKind.GAUGE:
-        desc.metric_kind = MetricDescriptor.MetricKind.GAUGE
+    desc = metric_pb2.MetricDescriptor()
+    desc.type = f"{_METRIC_TYPE_ROOT}/{metric.key}"
+
+    if metric.kind == MetricKind.COUNTER:
+        desc.metric_kind = metric_pb2.MetricDescriptor.MetricKind.CUMULATIVE
+    elif metric.kind == MetricKind.GAUGE:
+        desc.metric_kind = metric_pb2.MetricDescriptor.MetricKind.GAUGE
     else:
-        desc.metric_kind = MetricDescriptor.MetricKind.METRIC_KIND_UNSPECIFIED
+        desc.metric_kind = (
+            metric_pb2.MetricDescriptor.MetricKind.METRIC_KIND_UNSPECIFIED
+        )
 
-    if value_type == MetricType.BOOL:
-        desc.value_type = MetricDescriptor.ValueType.BOOL
-    elif value_type == MetricType.INT:
-        desc.value_type = MetricDescriptor.ValueType.INT64
-    elif value_type == MetricType.FLOAT:
-        desc.value_type = MetricDescriptor.ValueType.DOUBLE
+    if metric.value_type == ValueType.INT:
+        desc.value_type = metric_pb2.MetricDescriptor.ValueType.INT64
+    elif metric.value_type == ValueType.FLOAT:
+        desc.value_type = metric_pb2.MetricDescriptor.ValueType.DOUBLE
     else:
-        desc.value_type = MetricDescriptor.ValueType.VALUE_TYPE_UNSPECIFIED
+        desc.value_type = (
+            metric_pb2.MetricDescriptor.ValueType.VALUE_TYPE_UNSPECIFIED
+        )
 
-    for label in labels:
-        l = LabelDescriptor()
-        l.key = label.key
-        if label.value_type == LabelValueType.BOOL:
-            l.value_type = LabelDescriptor.ValueType.BOOL
-        elif label.value_type == LabelValueType.INT:
-            l.value_type = LabelDescriptor.ValueType.INT64
-        else:
-            l.value_type = LabelDescriptor.ValueType.STRING
-        desc.labels.append(l)
+    for label in metric.labels:
+        label_desc = label_pb2.LabelDescriptor()
+        label_desc.key = label.descriptor.key
+        # set everything to string for now
+        label_desc.value_type = label_pb2.LabelDescriptor.ValueType.STRING
+        desc.labels.append(label_desc)
 
     try:
-        return await client.create_metric_descriptor(
+        await client.create_metric_descriptor(
             name=project_name, metric_descriptor=desc
         )
+        return True
     except Exception as e:
         logging.error(f"failed to create metric descriptor: {e}")
         traceback.print_exc()
-    return None
+    return False
 
 
-def create_time_series(name: str, value: Union[int, float], ts: Union[int, float],
-                       value_type: MetricType, labels: Dict[str, str] = {}) \
-                       -> monitoring_v3.TimeSeries:
+def create_time_series(metric: Neo4j5Metric) -> monitoring_v3.TimeSeries:
     """
     Create a single GCP Time Series object.
     """
     series = monitoring_v3.TimeSeries()
-    interval = monitoring_v3.TimeInterval({
-        "end_time": {
-            "seconds": int(ts),
-            "nanos": (int((ts - int(ts)) * 10**9))
+
+    # Define the TimeInterval...
+    # for gauges, the start time is optional, but otherwise must be the end time
+    end_seconds = int(metric.seen_at)
+    end_time = {
+        "seconds": end_seconds,
+        "nanos": int((metric.seen_at - end_seconds) * 10**9),
+    }
+    start_time = end_time
+    if metric.kind == MetricKind.COUNTER:
+        start_seconds = int(metric.origin.first_seen)
+        start_time = {
+            "seconds": start_seconds,
+            "nanos": int((metric.origin.first_seen - start_seconds) * 10**9),
         }
+    interval = monitoring_v3.TimeInterval({
+        "start_time": start_time,
+        "end_time": end_time
     })
 
-    name = name.replace(".", "/")
-    series.metric.type = f"{_METRIC_TYPE_ROOT}/{name}"
+    # Describe the series metadata...
+    series.metric.type = f"{_METRIC_TYPE_ROOT}/{metric.key}"
     series.resource.type = "gce_instance"
-    series.resource.labels["instance_id"] = getInstanceId()
-    series.resource.labels["zone"] = getZoneId()
+    # series.resource.labels["instance_id"] = getInstanceId()
+    # series.resource.labels["zone"] = getZoneId()
 
-    for k, v in labels.items():
-        series.metric.labels[k] = v
+    for label in metric.labels:
+        series.metric.labels[label.descriptor.key] = label.value
 
+    # Assign our value as a point...
     point_value: Dict[str, Any] = {}
-    if value_type == MetricType.INT:
-        point_value = {"int64_value": int(value)}
-    elif value_type == MetricType.FLOAT:
-        point_value = {"double_value": float(value)}
-    elif value_type == MetricType.STRING:
-        point_value = {"string_value": str(value)}
-    elif value_type == MetricType.BOOL:
-        point_value = {"bool_value": bool(value)}
+    if metric.value_type == ValueType.INT:
+        point_value = {"int64_value": int(metric.value)}
     else:
-        # FALLBACK -- XXX this might not work with GCP custom metrics!!!
-        point_valuev = {"string_value": str(value)}
+        point_value = {"double_value": float(metric.value)}
 
     point = monitoring_v3.Point({"interval": interval,
                                  "value": point_value})
@@ -189,7 +169,7 @@ def create_time_series(name: str, value: Union[int, float], ts: Union[int, float
     return series
 
 
-async def write_time_series(series: List[monitoring_v3.TimeSeries]) -> None:
+async def write_time_series(series: List[monitoring_v3.TimeSeries]) -> bool:
     """
     Crude first cut at writing a TimeSeries metric. Still needs work:
       - handle multiple values at a time?
@@ -201,6 +181,38 @@ async def write_time_series(series: List[monitoring_v3.TimeSeries]) -> None:
     try:
         await client.create_time_series(name=project_name,
                                         time_series=series)
+        return True
     except Exception as e:
         logging.error(f"failed to create time series: {e}")
         traceback.print_exc()
+    return False
+
+
+
+_METRICS: Set[str] = set()
+
+async def write(metrics: List[Neo4j5Metric]) -> None:
+    """
+    Send the metrics to GCP!
+    """
+    series = []
+
+    for metric in metrics:
+
+        # Check if we haven't defined this metric type yet
+        if not metric.key in _METRICS:
+            _METRICS.add(metric.key)
+            logging.info(f"defining new metric: {metric})")
+            if await create_metric_descriptor(metric):
+                logging.info(f"created descriptor for metric {metric}")
+            else:
+                logging.warning(f"failed to create descriptor for {metric}")
+
+        # Convert into a time series
+        time_series = create_time_series(metric)
+        series.append(time_series)
+
+    if await write_time_series(series):
+        logging.info(f"wrote {len(series)} time series to GCP")
+    else:
+        logging.warning(f"failed to write time series to GCP!")
