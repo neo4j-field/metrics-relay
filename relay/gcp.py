@@ -1,5 +1,7 @@
 from enum import Enum
 from time import time
+
+import asyncio
 import logging
 import requests
 import traceback
@@ -197,16 +199,24 @@ async def write(metrics: List[Neo4j5Metric]) -> None:
     Send the metrics to GCP!
     """
     series = []
+    rate_limit = 0
 
     for metric in metrics:
 
         # Check if we haven't defined this metric type yet
         if not metric.key in _METRICS:
-            _METRICS.add(metric.key)
+            # Don't stampede the creation service. It gets sad :(
+            if rate_limit == 5:
+                await asyncio.sleep(1)
+                rate_limit = 0
+            rate_limit += 1
+
             logging.info(f"defining new metric: {metric})")
             if await create_metric_descriptor(metric):
                 logging.info(f"created descriptor for metric {metric}")
+                _METRICS.add(metric.key)
             else:
+                # try to get it the next time round...might be rate limit
                 logging.warning(f"failed to create descriptor for {metric}")
 
         # Convert into a time series
