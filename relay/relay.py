@@ -122,12 +122,11 @@ def create_consumer(q: Queue[WorkItem]) \
         Primary connection handler.
         """
         # Who is it?
-        (host, port) = writer.get_extra_info("peername")
-        client = f"{host}:{port}"
-        logging.debug(f"got connection from {client}")
-        if host not in CONNECTIONS:
-            CONNECTIONS.update({ host: time() })
-            logging.info(f"discovered new client {host}")
+        (client, port) = writer.get_extra_info("peername")
+        logging.debug(f"got connection from {client}:{port}")
+        if client not in CONNECTIONS:
+            CONNECTIONS.update({ client: time() })
+            logging.info(f"discovered new client {client}")
 
         # Chug along until EOF, implying disconnect.
         while not reader.at_eof():
