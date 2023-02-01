@@ -134,7 +134,7 @@ def create_consumer(q: Queue[WorkItem]) \
             line = await reader.readline()
             if line:
                 await q.put(WorkItem(buffer=line, client=client))
-        logging.debug(f"goodbye {client:port}")
+        logging.debug(f"goodbye {client}:{port}")
 
     return consumer
 
