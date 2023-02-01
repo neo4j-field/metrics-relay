@@ -20,7 +20,7 @@ from typing import (
 Number = Union[int, float]
 
 # Track historical connections.
-#   key: 'host:port' of the system sending us metrics
+#   key: hostname/ip of the system sending us metrics
 # value: the time we first saw that host
 CONNECTIONS: Dict[str, float] = {}
 
@@ -125,9 +125,9 @@ def create_consumer(q: Queue[WorkItem]) \
         (host, port) = writer.get_extra_info("peername")
         client = f"{host}:{port}"
         logging.debug(f"got connection from {client}")
-        if client not in CONNECTIONS:
-            CONNECTIONS.update({ client: time() })
-            logging.info(f"discovered new client {client}")
+        if host not in CONNECTIONS:
+            CONNECTIONS.update({ host: time() })
+            logging.info(f"discovered new client {host}")
 
         # Chug along until EOF, implying disconnect.
         while not reader.at_eof():
