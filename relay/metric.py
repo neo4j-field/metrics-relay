@@ -227,8 +227,13 @@ class Neo4j5Metric:
         else:
             metric.value_type = ValueType.FLOAT
 
-        # lastly, construct the key value
-        metric.key = "/".join(parts[2:])
+        # lastly, construct the key value...dropping some prefix junk
+        if metric.system == MetricSystem.DATABASE:
+            # drop "<label>.database.<db_name>..."
+            metric.key = "/".join(parts[3:])
+        else:
+            # drop "<label>.dbms...."
+            metric.key = "/".join(parts[2:])
 
         return metric
 
