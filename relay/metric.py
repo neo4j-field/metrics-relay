@@ -169,6 +169,9 @@ COUNTERS = set([
 
     # JVM
     "pause_time",
+
+    # the obvious
+    "count",
 ])
 
 
