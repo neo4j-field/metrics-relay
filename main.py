@@ -44,6 +44,8 @@ if __name__ == "__main__":
         epilog="be kind, rewind")
     parser.add_argument("-d", "--debug", dest="debug", action="store_true",
                         help="turn on debug logging")
+    parser.add_argument("-s", "--simple", dest="simple", action="store_true",
+                        help="simplify logging output for journald")
     parser.add_argument("--host", dest="host",
                         default="localhost", help="hostname or ip to listen on")
     parser.add_argument("--port", dest="port", type=int,
@@ -55,7 +57,13 @@ if __name__ == "__main__":
             root = LOGGING_CONFIG["root"]
             root.update({"level": "DEBUG"})
             LOGGING_CONFIG.update({"root": root})
-        logging.config.dictConfig(LOGGING_CONFIG)
+
+        if args.simple:
+            logging.basicConfig(encoding="utf8",
+                                format="%(levelname)-8s %(message)s",
+                                level="DEBUG" if args.debug else "INFO")
+        else:
+            logging.config.dictConfig(LOGGING_CONFIG)
 
         asyncio.run(relay.main(args.host, args.port))
     except KeyboardInterrupt:
