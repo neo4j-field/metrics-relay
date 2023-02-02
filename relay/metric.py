@@ -179,15 +179,16 @@ class Neo4j5Metric:
     """
     Represents a metric emitted by Neo4j v5.
     """
-    key: str
-    value: Union[int, float]
-    origin: Origin
-    seen_at: Union[int, float]
+    def __init__(self):
+        self.key: str = ""
+        self.value: Union[int, float] = 0
+        self.origin: Origin = Origin()
+        self.seen_at: Union[int, float] = 0
 
-    kind: MetricKind = MetricKind.GAUGE
-    value_type: ValueType = ValueType.INT
-    system: MetricSystem = MetricSystem.DBMS
-    labels: List[Label] = []
+        self.kind: MetricKind = MetricKind.GAUGE
+        self.value_type: ValueType = ValueType.INT
+        self.system: MetricSystem = MetricSystem.DBMS
+        self.labels: List[Label] = []
 
 
     @staticmethod
