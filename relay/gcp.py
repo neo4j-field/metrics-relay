@@ -206,7 +206,7 @@ async def write(metrics: List[Neo4j5Metric]) -> None:
         # Check if we haven't defined this metric type yet
         if not metric.key in _METRICS:
             # Don't stampede the creation service. It gets sad :(
-            if rate_limit == 5:
+            if rate_limit == 2:
                 await asyncio.sleep(1)
                 rate_limit = 0
             rate_limit += 1
