@@ -59,8 +59,32 @@ options:
   --port PORT  tcp port to listen on
 ```
 
-## Runnig as a Service
-TBA...going to provide example systemd unit file.
+## Running as a Service
+First, either clone or download a release to a location of your
+choosing. The default is currently `/usr/local/src/metrics-relay`.
+
+Make sure you've created a virtualenv and installed the dependencies
+as mentioned in the above [Install][#install] section.
+
+Install the provided unit file and enable it at boot:
+
+```
+# cp metrics-relay.service /etc/systemd/system/
+# systemctl enable metrics-relay.service
+```
+
+To start:
+
+```
+# systemctl start metrics-relay.service
+```
+
+The unit file is preconfigured to turn down the logging complexity so
+you can view the output using `journalctl`:
+
+```
+# journalctl -u metrics-relay.service
+```
 
 ## Metrics & You
 The app should add labels to your metrics, including:
