@@ -49,13 +49,14 @@ $ python main.py
 You have a few optional config options:
 
 ```
-usage: metrics-relay [-h] [-d] [--host HOST] [--port PORT]
+usage: metrics-relay [-h] [-d] [-s] [--host HOST] [--port PORT]
 
 Sends Neo4j metrics to the Cloud
 
 options:
   -h, --help   show this help message and exit
   -d, --debug  turn on debug logging
+  -s, --simple  simplify logging output for journald
   --host HOST  hostname or ip to listen on
   --port PORT  tcp port to listen on
 ```
