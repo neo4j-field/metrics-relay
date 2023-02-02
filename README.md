@@ -59,6 +59,17 @@ options:
   --port PORT  tcp port to listen on
 ```
 
+## Runnig as a Service
+TBA...going to provide example systemd unit file.
+
+## Metrics & You
+The app should add labels to your metrics, including:
+
+- `neo4j_label`: the label you set in `server.metrics.graphite.prefix`
+- `neo4j_system`: the reporting subsystem (i.e. dbms, db)
+- `neo4j_db_name`: name of the database, if applicable
+- `neo4j_instance_name`: ip/hostname of the client reporting metrics
+
 ## Hacking
 Want to do me a favor and add another cloud platform? Take a look at
 `relay/gcp.py`. The API is still congealing, but in short you just
