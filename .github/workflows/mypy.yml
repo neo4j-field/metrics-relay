@@ -1,0 +1,24 @@
+name: Check code with mypy
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  run-mypy-on-ubunut:
+    name: Run mypy on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Install mypy
+        run: pip install mypy
+      - name: Run mypy
+        run: mypy --strict .
