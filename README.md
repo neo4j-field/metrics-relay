@@ -1,4 +1,5 @@
 # metrics-relay
+[![mypy](https://github.com/neo4j-field/metrics-relay/actions/workflows/mypy.yml/badge.svg?branch=main)](https://github.com/neo4j-field/metrics-relay/actions/workflows/mypy.yml)
 
 >     ``You miss 100% of the shots you don't take.''
 >                       -- Wayne Gretzky
