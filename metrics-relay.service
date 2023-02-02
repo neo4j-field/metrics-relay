@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/src/metrics-relay/relay.sh --host 0.0.0.0
+ExecStart=/usr/local/src/metrics-relay/relay.sh --simple --host 0.0.0.0
 
 [Install]
 WantedBy=multi-user.target
